@@ -1,0 +1,102 @@
+# Election Voting System Architecture
+
+## System Overview
+
+A secure, scalable electronic voting system with three main components: Registration Website, Voting Website, and Counting & Analysis Dashboard.
+
+```mermaid
+graph TB
+    %% ====== Colors & Styling ======
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef database fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef security fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    
+    %% ====== Web Front-ends (Blue Zone) ======
+    subgraph "Web Front-ends"
+        REG[Registration Website]
+        VOTE[Voting Website]
+        DASH[Counting & Analysis Dashboard]
+    end
+    
+    class REG, VOTE, DASH frontend
+    
+    %% ====== Central Database (Purple Zone) ======
+    subgraph "Central Database (PostgreSQL)"
+        VOTERS[(Voters)]
+        CANDIDATES[(Candidates)]
+        VOTES[(Votes)]
+        RESULTS[(Results)]
+        OTP_LOGS[(OTPLogs)]
+        AUDIT_LOGS[(AuditLogs)]
+    end
+    
+    class VOTERS, CANDIDATES, VOTES, RESULTS, OTP_LOGS, AUDIT_LOGS database
+    
+    %% ====== External Services ======
+    SMS[SMS Provider]
+    EMAIL[Email Service]
+    CDN[CDN]
+    VAULT[Vault<br/>HashiCorp Vault / AWS Secrets Manager]
+    
+    %% ====== Security Components (Orange Zone) ======
+    subgraph "Security-critical components"
+        WAF[WAF<br/>Web Application Firewall]
+        LB[Load Balancer]
+        ENCRYPTION[Encryption Engine<br/>pgcrypto / TDE]
+    end
+    
+    class WAF, LB, ENCRYPTION security
+    
+    %% ====== Data Flow Connections ======
+    
+    %% Public Access
+    PUBLIC((Public Users)) -->|HTTPS| WAF
+    WAF --> LB
+    LB --> REG
+    LB --> VOTE
+    
+    %% Registration Flow
+    REG -->|1. store voter data| VOTERS
+    REG -->|2. generate OTP| OTP_LOGS
+    REG -->|3. send OTP| SMS
+    SMS -->|deliver OTP| PUBLIC
+    
+    %% Voting Flow
+    VOTE -->|4. verify OTP| OTP_LOGS
+    VOTE -->|5. read candidates| CANDIDATES
+    VOTE -->|6. submit vote| VOTES
+    VOTE -->|7. mark as voted| VOTERS
+    VOTE -->|8. audit log| AUDIT_LOGS
+    
+    %% Dashboard Access
+    ADMINS((Admins/Auditors)) -->|MFA Required| DASH
+    DASH -->|9. read votes| VOTES
+    DASH -->|10. read results| RESULTS
+    DASH -->|11. audit trail| AUDIT_LOGS
+    
+    %% Security & Infrastructure
+    REG -->|encrypt PII| ENCRYPTION
+    VOTE -->|encrypt votes| ENCRYPTION
+    REG -->|static assets| CDN
+    VOTE -->|static assets| CDN
+    DASH -->|static assets| CDN
+    
+    %% Secrets Management
+    REG -->|get API keys| VAULT
+    SMS -->|get credentials| VAULT
+    EMAIL -->|get credentials| VAULT
+    
+    %% Batch Processing (not shown in main flow)
+    BATCH[Batch Job<br/>Nightly Aggregation] -->|update| RESULTS
+    VOTES -->|stream| BATCH
+    
+    %% ====== Legend ======
+    subgraph "Legend"
+        L_FRONT[Web Front-end]
+        L_DB[Database]
+        L_SEC[Security Component]
+    end
+    
+    class L_FRONT frontend
+    class L_DB database
+    class L_SEC security
